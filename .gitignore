@@ -1,0 +1,9 @@
+# Roblox place files
+*.rbxl
+*.rbxlx
+
+# macOS
+.DS_Store
+
+# Rokit local cache
+.rokit/
