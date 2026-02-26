@@ -1,5 +1,5 @@
 {
-  "name": "pinata",
+  "name": "card-game-shop",
   "tree": {
     "$className": "DataModel",
     "ServerScriptService": {
