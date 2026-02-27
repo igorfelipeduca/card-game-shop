@@ -23,7 +23,7 @@ resetDayStatsEvent.Parent = ReplicatedStorage
 -- =====================
 local DAY_START_HOUR = 8
 local WARNING_HOUR = 18
-local MINUTES_PER_SECOND = 960 / 900 -- 15 real minutes = full day (8:00-23:59)
+local MINUTES_PER_SECOND = 4 -- 4 game minutes per real second; full day ~4 real minutes (8:00-23:59)
 
 -- =====================
 -- CLOCK STATE
@@ -52,10 +52,14 @@ local function broadcastTime()
 	local elapsed = tick() - dayStartTime
 	local isLate = h >= WARNING_HOUR
 
-	-- Log every hour change + real elapsed time
+	-- Log every broadcast with exact timestamps
+	print(string.format("[DayCycleManager] tick=%.3f | elapsed=%.2fs | game=%02d:%02d | isLate=%s",
+		tick(), elapsed, h, m, tostring(isLate)))
+
+	-- Extra log on hour change
 	if h ~= lastLoggedHour then
 		lastLoggedHour = h
-		print(string.format("[DayCycleManager] Game time %02d:%02d | Real elapsed: %.1fs", h, m, elapsed))
+		print(string.format("[DayCycleManager] >> HOUR CHANGE -> %02d:00 | real elapsed: %.1fs", h, elapsed))
 	end
 
 	for _, player in Players:GetPlayers() do

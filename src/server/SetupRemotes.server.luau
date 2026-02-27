@@ -75,3 +75,16 @@ deliveryUpdate.Parent = remotes
 local deliveryArrived = Instance.new("RemoteEvent")
 deliveryArrived.Name = "DeliveryArrived"
 deliveryArrived.Parent = remotes
+
+local updateShelfPrice = Instance.new("RemoteEvent")
+updateShelfPrice.Name = "UpdateShelfPrice"
+updateShelfPrice.Parent = remotes
+
+-- Shop name remotes
+local requestShopName = Instance.new("RemoteEvent")
+requestShopName.Name = "RequestShopName"
+requestShopName.Parent = remotes
+
+local setShopName = Instance.new("RemoteEvent")
+setShopName.Name = "SetShopName"
+setShopName.Parent = remotes

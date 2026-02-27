@@ -5,6 +5,7 @@ local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local PlaceCardEvent = Remotes:WaitForChild("PlaceCard")
 local RemoveCardEvent = Remotes:WaitForChild("RemoveCard")
 local UpdateSlotEvent = Remotes:WaitForChild("UpdateSlot")
+local UpdateShelfPriceEvent = Remotes:WaitForChild("UpdateShelfPrice")
 
 -- State: slotName -> { cardId: string, playerId: number, shelfPrice: number } or nil
 local slotState = {}
@@ -146,6 +147,43 @@ RemoveCardEvent.OnServerEvent:Connect(function(player, slotName)
 	UpdateSlotEvent:FireAllClients(slotName, nil, nil)
 
 	print("[ShelfManager] " .. player.Name .. " removed card from " .. slotName)
+end)
+
+UpdateShelfPriceEvent.OnServerEvent:Connect(function(player, slotName, newPrice)
+	local state = slotState[slotName]
+	if not state then
+		warn("[ShelfManager] Slot empty, can't update price: " .. tostring(slotName))
+		return
+	end
+
+	if state.playerId ~= player.UserId then
+		warn("[ShelfManager] Not your card")
+		return
+	end
+
+	newPrice = tonumber(newPrice) or state.shelfPrice
+	if newPrice < 1 then newPrice = 1 end
+
+	state.shelfPrice = newPrice
+
+	-- Update visual
+	local pokemonShelf = findShelf()
+	if not pokemonShelf then return end
+	local slotPart = pokemonShelf:FindFirstChild(slotName)
+	if not slotPart then return end
+
+	local cardLabel = slotPart:FindFirstChild("CardLabel")
+	if cardLabel then
+		for _, child in cardLabel:GetChildren() do
+			if child:IsA("TextLabel") and child.Position.Y.Scale >= 0.6 then
+				child.Text = "$" .. newPrice
+				break
+			end
+		end
+	end
+
+	UpdateSlotEvent:FireAllClients(slotName, state.cardId, player.UserId, newPrice)
+	print("[ShelfManager] " .. player.Name .. " updated price in " .. slotName .. " to $" .. newPrice)
 end)
 
 -- NPC picked up a card from a slot

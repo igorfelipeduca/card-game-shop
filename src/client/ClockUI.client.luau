@@ -17,7 +17,7 @@ clockGui.Parent = playerGui
 
 local clockFrame = Instance.new("Frame")
 clockFrame.Size = UDim2.new(0, 110, 0, 38)
-clockFrame.Position = UDim2.new(1, -120, 0, 55)
+clockFrame.Position = UDim2.new(1, -120, 0, 60)
 clockFrame.BackgroundColor3 = Color3.new(0.08, 0.08, 0.1)
 clockFrame.BackgroundTransparency = 0.15
 clockFrame.BorderSizePixel = 0
@@ -63,7 +63,7 @@ warningLabel.Position = UDim2.new(0, 5, 0, 0)
 warningLabel.BackgroundTransparency = 1
 warningLabel.Text = "It's late! Close your shop on the computer"
 warningLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
-warningLabel.TextSize = 12
+warningLabel.TextSize = 18
 warningLabel.Font = Enum.Font.LuckiestGuy
 warningLabel.Parent = warningFrame
 

@@ -1,12 +1,14 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local CardData = require(ReplicatedStorage:WaitForChild("CardData"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local PlaceCardEvent = Remotes:WaitForChild("PlaceCard")
 local RemoveCardEvent = Remotes:WaitForChild("RemoveCard")
 local UpdateSlotEvent = Remotes:WaitForChild("UpdateSlot")
+local UpdateShelfPriceEvent = Remotes:WaitForChild("UpdateShelfPrice")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -15,7 +17,7 @@ local mouse = player:GetMouse()
 local getSelectedCard = player:WaitForChild("GetSelectedCard")
 local clearSelection = player:WaitForChild("ClearCardSelection")
 
--- Track slot states locally
+-- Track slot states locally: slotName -> { cardId, shelfPrice } or nil
 local localSlotState = {}
 
 -- Selection box for hover
@@ -29,9 +31,125 @@ selectionBox.Parent = playerGui
 local currentHover = nil
 
 -- =====================
+-- QUICK ACTION MENU (for occupied slots)
+-- =====================
+local quickMenuOpen = false
+local quickMenuSlot = nil
+
+local quickMenuGui = Instance.new("ScreenGui")
+quickMenuGui.Name = "QuickMenuGui"
+quickMenuGui.ResetOnSpawn = false
+quickMenuGui.Parent = playerGui
+
+local quickMenuOverlay = Instance.new("Frame")
+quickMenuOverlay.Size = UDim2.new(1, 0, 1, 0)
+quickMenuOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
+quickMenuOverlay.BackgroundTransparency = 0.5
+quickMenuOverlay.BorderSizePixel = 0
+quickMenuOverlay.Visible = false
+quickMenuOverlay.Parent = quickMenuGui
+
+local quickPanel = Instance.new("Frame")
+quickPanel.Size = UDim2.new(0, 220, 0, 190)
+quickPanel.Position = UDim2.new(0.5, -110, 0.5, -95)
+quickPanel.BackgroundColor3 = Color3.new(0.1, 0.1, 0.12)
+quickPanel.BorderSizePixel = 0
+quickPanel.Parent = quickMenuOverlay
+
+local qpCorner = Instance.new("UICorner")
+qpCorner.CornerRadius = UDim.new(0, 10)
+qpCorner.Parent = quickPanel
+
+local qpStroke = Instance.new("UIStroke")
+qpStroke.Thickness = 2
+qpStroke.Color = Color3.new(0.3, 0.3, 0.4)
+qpStroke.Parent = quickPanel
+
+-- Card color bar in quick menu
+local qmColorBar = Instance.new("Frame")
+qmColorBar.Size = UDim2.new(1, -20, 0, 30)
+qmColorBar.Position = UDim2.new(0, 10, 0, 10)
+qmColorBar.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+qmColorBar.BorderSizePixel = 0
+qmColorBar.Parent = quickPanel
+
+local qmColorCorner = Instance.new("UICorner")
+qmColorCorner.CornerRadius = UDim.new(0, 6)
+qmColorCorner.Parent = qmColorBar
+
+local qmCardName = Instance.new("TextLabel")
+qmCardName.Size = UDim2.new(1, -10, 1, 0)
+qmCardName.Position = UDim2.new(0, 5, 0, 0)
+qmCardName.BackgroundTransparency = 1
+qmCardName.Text = ""
+qmCardName.TextColor3 = Color3.new(1, 1, 1)
+qmCardName.TextSize = 13
+qmCardName.Font = Enum.Font.LuckiestGuy
+qmCardName.TextStrokeTransparency = 0.3
+qmCardName.Parent = qmColorBar
+
+local qmPriceLabel = Instance.new("TextLabel")
+qmPriceLabel.Size = UDim2.new(1, -20, 0, 22)
+qmPriceLabel.Position = UDim2.new(0, 10, 0, 46)
+qmPriceLabel.BackgroundTransparency = 1
+qmPriceLabel.Text = "Price: $0"
+qmPriceLabel.TextColor3 = Color3.new(1, 1, 0.4)
+qmPriceLabel.TextSize = 14
+qmPriceLabel.Font = Enum.Font.LuckiestGuy
+qmPriceLabel.TextXAlignment = Enum.TextXAlignment.Center
+qmPriceLabel.Parent = quickPanel
+
+local function makeQuickBtn(text, yPos, bgColor)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -30, 0, 30)
+	btn.Position = UDim2.new(0, 15, 0, yPos)
+	btn.BackgroundColor3 = bgColor
+	btn.Text = text
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.TextSize = 13
+	btn.Font = Enum.Font.LuckiestGuy
+	btn.BorderSizePixel = 0
+	btn.Parent = quickPanel
+
+	local bc = Instance.new("UICorner")
+	bc.CornerRadius = UDim.new(0, 6)
+	bc.Parent = btn
+
+	return btn
+end
+
+local qmChangePriceBtn = makeQuickBtn("CHANGE PRICE", 76, Color3.new(0.15, 0.35, 0.6))
+local qmRemoveBtn = makeQuickBtn("REMOVE CARD", 112, Color3.new(0.6, 0.15, 0.15))
+local qmCancelBtn = makeQuickBtn("CANCEL", 148, Color3.new(0.25, 0.25, 0.3))
+
+local function closeQuickMenu()
+	quickMenuOpen = false
+	quickMenuOverlay.Visible = false
+	quickMenuSlot = nil
+end
+
+local function openQuickMenu(slotName)
+	local slotData = localSlotState[slotName]
+	if not slotData then return end
+
+	local cardInfo = CardData.GetCardById(slotData.cardId)
+	if not cardInfo then return end
+
+	quickMenuSlot = slotName
+	quickMenuOpen = true
+
+	qmColorBar.BackgroundColor3 = cardInfo.color
+	qmCardName.Text = cardInfo.name
+	qmPriceLabel.Text = "Price: $" .. (slotData.shelfPrice or cardInfo.price)
+
+	quickMenuOverlay.Visible = true
+end
+
+-- =====================
 -- PRICING UI
 -- =====================
 local pricingOpen = false
+local pricingEditMode = false -- true when editing an existing slot's price
 local pendingSlot = nil
 local pendingCardId = nil
 local priceInput = ""
@@ -263,14 +381,25 @@ local function updatePriceDisplay()
 	end
 end
 
-local function openPricing(slotName, cardId)
+local function openPricing(slotName, cardId, editMode, currentShelfPrice)
 	local cardInfo = CardData.GetCardById(cardId)
 	if not cardInfo then return end
 
 	pendingSlot = slotName
 	pendingCardId = cardId
+	pricingEditMode = editMode or false
 	currentCardCost = cardInfo.cost
-	priceInput = tostring(cardInfo.price)
+
+	if editMode and currentShelfPrice then
+		priceInput = tostring(currentShelfPrice)
+		pricingTitle.Text = "EDIT SHELF PRICE"
+		confirmBtn.Text = "UPDATE"
+	else
+		priceInput = tostring(cardInfo.price)
+		pricingTitle.Text = "SET SHELF PRICE"
+		confirmBtn.Text = "PLACE"
+	end
+
 	pricingOpen = true
 
 	cardColorBar.BackgroundColor3 = cardInfo.color
@@ -284,6 +413,7 @@ end
 
 local function closePricing()
 	pricingOpen = false
+	pricingEditMode = false
 	pricingOverlay.Visible = false
 	pendingSlot = nil
 	pendingCardId = nil
@@ -319,8 +449,13 @@ confirmBtn.MouseButton1Click:Connect(function()
 	if not pricingOpen or not pendingSlot or not pendingCardId then return end
 	local price = tonumber(priceInput) or 0
 	if price < 1 then return end
-	PlaceCardEvent:FireServer(pendingSlot, pendingCardId, price)
-	clearSelection:Fire()
+
+	if pricingEditMode then
+		UpdateShelfPriceEvent:FireServer(pendingSlot, price)
+	else
+		PlaceCardEvent:FireServer(pendingSlot, pendingCardId, price)
+		clearSelection:Fire()
+	end
 	closePricing()
 end)
 
@@ -329,22 +464,112 @@ cancelBtn.MouseButton1Click:Connect(function()
 end)
 
 -- =====================
+-- KEYBOARD INPUT FOR PRICING
+-- =====================
+local PRICE_KEY_TO_DIGIT = {
+	[Enum.KeyCode.Zero] = "0",    [Enum.KeyCode.KeypadZero] = "0",
+	[Enum.KeyCode.One] = "1",     [Enum.KeyCode.KeypadOne] = "1",
+	[Enum.KeyCode.Two] = "2",     [Enum.KeyCode.KeypadTwo] = "2",
+	[Enum.KeyCode.Three] = "3",   [Enum.KeyCode.KeypadThree] = "3",
+	[Enum.KeyCode.Four] = "4",    [Enum.KeyCode.KeypadFour] = "4",
+	[Enum.KeyCode.Five] = "5",    [Enum.KeyCode.KeypadFive] = "5",
+	[Enum.KeyCode.Six] = "6",     [Enum.KeyCode.KeypadSix] = "6",
+	[Enum.KeyCode.Seven] = "7",   [Enum.KeyCode.KeypadSeven] = "7",
+	[Enum.KeyCode.Eight] = "8",   [Enum.KeyCode.KeypadEight] = "8",
+	[Enum.KeyCode.Nine] = "9",    [Enum.KeyCode.KeypadNine] = "9",
+}
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed or not pricingOpen then return end
+
+	local digit = PRICE_KEY_TO_DIGIT[input.KeyCode]
+	if digit then
+		if #priceInput >= 6 then return end
+		if priceInput == "0" or priceInput == "" then
+			priceInput = digit
+		else
+			priceInput = priceInput .. digit
+		end
+		updatePriceDisplay()
+	elseif input.KeyCode == Enum.KeyCode.Backspace then
+		if #priceInput > 1 then
+			priceInput = priceInput:sub(1, -2)
+		else
+			priceInput = ""
+		end
+		updatePriceDisplay()
+	elseif input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter then
+		confirmBtn.MouseButton1Click:Fire()
+	elseif input.KeyCode == Enum.KeyCode.Escape then
+		closePricing()
+	end
+end)
+
+-- =====================
+-- QUICK MENU CONNECTIONS
+-- =====================
+qmChangePriceBtn.MouseButton1Click:Connect(function()
+	if not quickMenuSlot then return end
+	local slotData = localSlotState[quickMenuSlot]
+	if not slotData then
+		closeQuickMenu()
+		return
+	end
+	local slotName = quickMenuSlot
+	closeQuickMenu()
+	openPricing(slotName, slotData.cardId, true, slotData.shelfPrice)
+end)
+
+qmRemoveBtn.MouseButton1Click:Connect(function()
+	if not quickMenuSlot then return end
+	RemoveCardEvent:FireServer(quickMenuSlot)
+	closeQuickMenu()
+end)
+
+qmCancelBtn.MouseButton1Click:Connect(function()
+	closeQuickMenu()
+end)
+
+-- =====================
 -- HOVER DETECTION
 -- =====================
 RunService.RenderStepped:Connect(function()
-	if pricingOpen then
+	if pricingOpen or quickMenuOpen then
 		selectionBox.Adornee = nil
 		currentHover = nil
 		return
 	end
 
-	local hasCard = getSelectedCard:Invoke() ~= nil
 	local target = mouse.Target
 
-	if hasCard and target and target:GetAttribute("IsSlot") and not localSlotState[target.Name] then
-		if currentHover ~= target then
-			currentHover = target
-			selectionBox.Adornee = target
+	if target and target:GetAttribute("IsSlot") then
+		local slotData = localSlotState[target.Name]
+
+		if slotData then
+			-- Occupied slot: show yellow/orange highlight
+			if currentHover ~= target then
+				currentHover = target
+				selectionBox.Color3 = Color3.new(1, 0.7, 0.2)
+				selectionBox.SurfaceColor3 = Color3.new(1, 0.8, 0.3)
+				selectionBox.Adornee = target
+			end
+		else
+			-- Only check selected card for empty slots
+			local hasCard = getSelectedCard:Invoke() ~= nil
+			if hasCard then
+				-- Empty slot with card selected: show blue highlight
+				if currentHover ~= target then
+					currentHover = target
+					selectionBox.Color3 = Color3.new(0.2, 0.5, 1)
+					selectionBox.SurfaceColor3 = Color3.new(0.3, 0.6, 1)
+					selectionBox.Adornee = target
+				end
+			else
+				if currentHover then
+					currentHover = nil
+					selectionBox.Adornee = nil
+				end
+			end
 		end
 	else
 		if currentHover then
@@ -358,14 +583,14 @@ end)
 -- CLICK HANDLING
 -- =====================
 mouse.Button1Down:Connect(function()
-	if pricingOpen then return end
+	if pricingOpen or quickMenuOpen then return end
 	if not currentHover then return end
 
 	local slotName = currentHover.Name
-	local slotOccupied = localSlotState[slotName]
+	local slotData = localSlotState[slotName]
 
-	if slotOccupied then
-		RemoveCardEvent:FireServer(slotName)
+	if slotData then
+		openQuickMenu(slotName)
 	else
 		local cardId = getSelectedCard:Invoke()
 		if not cardId then return end
@@ -374,6 +599,12 @@ mouse.Button1Down:Connect(function()
 end)
 
 -- Listen for slot updates from server
-UpdateSlotEvent.OnClientEvent:Connect(function(slotName, cardId, playerId)
-	localSlotState[slotName] = cardId
+UpdateSlotEvent.OnClientEvent:Connect(function(slotName, cardId, playerId, shelfPrice)
+	if cardId then
+		localSlotState[slotName] = { cardId = cardId, shelfPrice = shelfPrice }
+	else
+		localSlotState[slotName] = nil
+	end
 end)
+
+print("[ShelfInteraction] Loaded with quick menu + edit mode")

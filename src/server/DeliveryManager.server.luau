@@ -9,8 +9,15 @@ local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local DeliveryUpdateEvent = Remotes:WaitForChild("DeliveryUpdate")
 local DeliveryArrivedEvent = Remotes:WaitForChild("DeliveryArrived")
 
-local DELIVERY_TIME = 15
+-- Dynamic delivery time: 5s base + 2s per card, max 20s
+local BASE_DELIVERY_TIME = 5
+local PER_CARD_TIME = 2
+local MAX_DELIVERY_TIME = 20
 local BOX_POSITION = Vector3.new(8, 1, 19)
+
+local function getDeliveryTime(itemCount)
+	return math.min(BASE_DELIVERY_TIME + PER_CARD_TIME * itemCount, MAX_DELIVERY_TIME)
+end
 
 -- =====================
 -- DELIVERY BOX TEMPLATE
@@ -44,9 +51,15 @@ local deliveries = {}
 
 local function startDeliveryTimer(userId)
 	task.spawn(function()
-		task.wait(DELIVERY_TIME)
-
 		local delivery = deliveries[userId]
+		if not delivery then return end
+
+		local deliveryTime = getDeliveryTime(#delivery.items)
+		delivery.totalTime = deliveryTime
+
+		task.wait(deliveryTime)
+
+		delivery = deliveries[userId]
 		if not delivery or delivery.delivered then return end
 
 		delivery.delivered = true
@@ -114,11 +127,13 @@ queueEvent.Event:Connect(function(userId, cardId)
 
 	if not delivery or delivery.delivered then
 		-- Start new delivery
+		local deliveryTime = getDeliveryTime(1)
 		deliveries[userId] = {
 			items = { cardId },
 			startTime = tick(),
 			delivered = false,
 			box = nil,
+			totalTime = deliveryTime,
 		}
 		startDeliveryTimer(userId)
 
@@ -126,22 +141,26 @@ queueEvent.Event:Connect(function(userId, cardId)
 		if player then
 			DeliveryUpdateEvent:FireClient(player, {
 				totalItems = 1,
-				totalTime = DELIVERY_TIME,
-				remainingTime = DELIVERY_TIME,
+				totalTime = deliveryTime,
+				remainingTime = deliveryTime,
 			})
 		end
 	else
 		-- Add to existing pending delivery
 		table.insert(delivery.items, cardId)
 
+		-- Recalculate delivery time based on new item count
+		local newDeliveryTime = getDeliveryTime(#delivery.items)
+		delivery.totalTime = newDeliveryTime
+
 		local elapsed = tick() - delivery.startTime
-		local remaining = math.max(0, DELIVERY_TIME - elapsed)
+		local remaining = math.max(0, newDeliveryTime - elapsed)
 
 		local player = Players:GetPlayerByUserId(userId)
 		if player then
 			DeliveryUpdateEvent:FireClient(player, {
 				totalItems = #delivery.items,
-				totalTime = DELIVERY_TIME,
+				totalTime = newDeliveryTime,
 				remainingTime = remaining,
 			})
 		end

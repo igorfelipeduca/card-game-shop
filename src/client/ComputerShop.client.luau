@@ -51,7 +51,7 @@ local function setupComputerPrompt()
 
 	print("[ComputerShop] Attaching prompt to LaptopPromptPart")
 	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Open Shop"
+	prompt.ActionText = "Browse Cards"
 	prompt.ObjectText = "CardMarket.gg"
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = 10

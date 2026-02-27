@@ -171,6 +171,40 @@ task.spawn(function()
 end)
 
 local shopOpen = false
+local shopNameSet = false
+local angryPenalty = 0 -- extra seconds added to next customer spawn delay
+
+-- Naming remotes (StorefrontSign handles the visual, we just trigger the prompt)
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local RequestShopNameEvent = Remotes:WaitForChild("RequestShopName")
+local SetShopNameEvent = Remotes:WaitForChild("SetShopName")
+SetShopNameEvent.OnServerEvent:Connect(function(player, name)
+	if not shopNameSet then
+		shopNameSet = true
+		-- Open shop after name is set
+		shopOpen = true
+		local s = workspace:FindFirstChild("ShopSign")
+		if s then
+			for _, gui in s:GetChildren() do
+				if gui:IsA("SurfaceGui") then
+					local bg = gui:FindFirstChild("Bg")
+					if bg then
+						bg.BackgroundColor3 = Color3.new(0.1, 0.65, 0.1)
+						local label = bg:FindFirstChild("StatusLabel")
+						if label then label.Text = "OPEN" end
+					end
+				end
+			end
+			local sp = s:FindFirstChildOfClass("ProximityPrompt")
+			if sp then sp.ActionText = "Close Shop" end
+		end
+		local openShopSound = SoundService:FindFirstChild("OpenShop")
+		if openShopSound then openShopSound:Play() end
+		print("[BuyerNPC] Shop OPENED after naming by " .. player.Name)
+		shopOpenedEvent:Fire()
+		task.spawn(spawnCustomersLoop)
+	end
+end)
 
 -- Listen for CloseShop from DayCycleManager
 task.spawn(function()
@@ -231,6 +265,12 @@ if sign then
 	end
 
 	signPrompt.Triggered:Connect(function(player)
+		-- First time: ask for shop name (StorefrontSign will update its display)
+		if not shopNameSet then
+			RequestShopNameEvent:FireClient(player, player.Name)
+			return
+		end
+
 		shopOpen = not shopOpen
 		updateSign()
 		local openShopSound = SoundService:FindFirstChild("OpenShop")
@@ -278,7 +318,12 @@ task.spawn(function()
 	local checkoutDone = ReplicatedStorage:WaitForChild("CheckoutDone", 30)
 	if not checkoutDone then return end
 
-	checkoutDone.Event:Connect(function()
+	checkoutDone.Event:Connect(function(isAngry)
+		if isAngry then
+			angryPenalty += 30
+			print("[BuyerNPC] Customer was cheated! Angry penalty: +" .. angryPenalty .. "s before next spawn")
+		end
+
 		if #registerQueue == 0 then return end
 
 		local served = table.remove(registerQueue, 1)
@@ -466,6 +511,11 @@ function spawnCustomersLoop()
 
 	while shopOpen do
 		local waitTime = math.random(8, 20)
+		if angryPenalty > 0 then
+			waitTime += angryPenalty
+			print("[BuyerNPC] Applying angry penalty: +" .. angryPenalty .. "s wait (total " .. waitTime .. "s)")
+			angryPenalty = 0
+		end
 		task.wait(waitTime)
 
 		if not shopOpen then break end

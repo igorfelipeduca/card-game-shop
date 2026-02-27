@@ -223,34 +223,37 @@ SubmitChangeEvent.OnServerEvent:Connect(function(player, changeAmount)
 	end
 
 	local correct = currentCheckout.correctChange
+	local payment = currentCheckout.payment
+	local totalPrice = currentCheckout.totalPrice
 
+	-- Player nets: what NPC paid minus what player gave back as change
+	local playerEarns = math.max(0, payment - changeAmount)
+
+	local isAngry = changeAmount < correct -- gave less change than owed → customer cheated
+
+	local bell = SoundService:FindFirstChild("Bell2")
+	if bell then bell:Play() end
+
+	saleStats.revenue += totalPrice
+	saleStats.cardsSold += #currentCheckout.cards
+	addMoney(player, playerEarns)
+
+	local message
 	if changeAmount == correct then
-		print("[CheckoutManager] Correct! Sale complete.")
-
-		local bell = SoundService:FindFirstChild("Bell2")
-		if bell then
-			bell:Play()
-		end
-
-		saleStats.revenue += currentCheckout.totalPrice
-		saleStats.cardsSold += #currentCheckout.cards
-
-		addMoney(player, currentCheckout.totalPrice)
-		CheckoutResultEvent:FireClient(player, true, "Sale complete! +$" .. currentCheckout.totalPrice)
-		checkoutDoneEvent:Fire()
-		currentCheckout = nil
+		message = "Perfect change! +$" .. playerEarns
+		print("[CheckoutManager] Correct change. Sale complete. Player earns $" .. playerEarns)
+	elseif isAngry then
+		message = "Customer left angry! +$" .. playerEarns
+		print("[CheckoutManager] Short change! Got $" .. changeAmount .. ", owed $" .. correct .. ". Player earns $" .. playerEarns .. ". Customer ANGRY.")
 	else
-		print("[CheckoutManager] Wrong change. Got $" .. changeAmount .. ", expected $" .. correct)
-
-		local hint = ""
-		if changeAmount > correct then
-			hint = "Change too high!"
-		elseif changeAmount < correct then
-			hint = "Change too low!"
-		end
-
-		CheckoutResultEvent:FireClient(player, false, hint)
+		message = "Too much change! +$" .. playerEarns
+		print("[CheckoutManager] Overpaid change! Got $" .. changeAmount .. ", owed $" .. correct .. ". Player earns $" .. playerEarns)
 	end
+
+	local isPerfect = changeAmount == correct
+	CheckoutResultEvent:FireClient(player, true, message, isPerfect)
+	checkoutDoneEvent:Fire(isAngry)
+	currentCheckout = nil
 end)
 
 -- =====================

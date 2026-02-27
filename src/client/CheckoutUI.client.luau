@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local OpenCheckoutEvent = Remotes:WaitForChild("OpenCheckout")
@@ -250,7 +251,7 @@ local hintLabel = Instance.new("TextLabel")
 hintLabel.Size = UDim2.new(1, -24, 0, 16)
 hintLabel.Position = UDim2.new(0, 12, 0, 96)
 hintLabel.BackgroundTransparency = 1
-hintLabel.Text = "Enter this amount below and press OK"
+hintLabel.Text = "Type with keyboard · Backspace to erase · Enter to confirm"
 hintLabel.TextColor3 = Color3.new(0.4, 0.4, 0.4)
 hintLabel.TextSize = 10
 hintLabel.Font = Enum.Font.LuckiestGuy
@@ -400,6 +401,40 @@ for _, btn in numpadFrame:GetChildren() do
 end
 
 -- =====================
+-- KEYBOARD INPUT
+-- =====================
+local KEY_TO_DIGIT = {
+	[Enum.KeyCode.Zero] = "0",    [Enum.KeyCode.KeypadZero] = "0",
+	[Enum.KeyCode.One] = "1",     [Enum.KeyCode.KeypadOne] = "1",
+	[Enum.KeyCode.Two] = "2",     [Enum.KeyCode.KeypadTwo] = "2",
+	[Enum.KeyCode.Three] = "3",   [Enum.KeyCode.KeypadThree] = "3",
+	[Enum.KeyCode.Four] = "4",    [Enum.KeyCode.KeypadFour] = "4",
+	[Enum.KeyCode.Five] = "5",    [Enum.KeyCode.KeypadFive] = "5",
+	[Enum.KeyCode.Six] = "6",     [Enum.KeyCode.KeypadSix] = "6",
+	[Enum.KeyCode.Seven] = "7",   [Enum.KeyCode.KeypadSeven] = "7",
+	[Enum.KeyCode.Eight] = "8",   [Enum.KeyCode.KeypadEight] = "8",
+	[Enum.KeyCode.Nine] = "9",    [Enum.KeyCode.KeypadNine] = "9",
+}
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed or not checkoutOpen then return end
+
+	local digit = KEY_TO_DIGIT[input.KeyCode]
+	if digit then
+		pressNumber(digit)
+	elseif input.KeyCode == Enum.KeyCode.Backspace then
+		if #currentInput > 1 then
+			currentInput = currentInput:sub(1, -2)
+			updateDisplay()
+		else
+			pressClear()
+		end
+	elseif input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter then
+		pressOK()
+	end
+end)
+
+-- =====================
 -- OPEN / CLOSE
 -- =====================
 local function openRegister(data)
@@ -482,11 +517,18 @@ OpenCheckoutEvent.OnClientEvent:Connect(function(data)
 	openRegister(data)
 end)
 
-CheckoutResultEvent.OnClientEvent:Connect(function(success, message)
+local SoundService = game:GetService("SoundService")
+
+CheckoutResultEvent.OnClientEvent:Connect(function(success, message, isPerfect)
 	if success then
-		statusLabel.TextColor3 = Color3.new(0.2, 1, 0.2)
+		if isPerfect then
+			statusLabel.TextColor3 = Color3.new(0.2, 1, 0.2)
+		else
+			statusLabel.TextColor3 = Color3.new(1, 0.3, 0.3)
+			local errorSound = SoundService:FindFirstChild("error")
+			if errorSound then errorSound:Play() end
+		end
 		statusLabel.Text = message
-		-- Disable input while waiting for next customer
 		checkoutOpen = false
 		currentInput = ""
 		updateDisplay()
